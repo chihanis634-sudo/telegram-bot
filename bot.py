@@ -9,7 +9,7 @@ import threading
 # -----------------------------
 import os
 
-BOT_TOKEN ="8531271957:AAFRkQAgqJRUnic2YtejXsxr1qADfxYUk_A"
+BOT_TOKEN ="8531271957:AAHh916DdY8D9QwGBSk76gXPLV-JbFEp3xM"
 OPENROUTER_API_KEY ="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"
 
 MODEL = "openai/gpt-4o-mini"
