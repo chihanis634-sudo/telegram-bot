@@ -24,7 +24,7 @@ bot = telebot.TeleBot(BOT_TOKEN)
 # -----------------------------
 # Flask Keep Alive
 # -----------------------------
-app = Flask(--name--)
+app = Flask(__name__)
 @app.route("/")
 def home():
     return "Bot is alive!"
