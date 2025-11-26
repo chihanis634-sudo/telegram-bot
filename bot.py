@@ -1,3 +1,14 @@
+from flask import Flask
+import threading
+
+app = Flask(name)
+
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=10000)
 import telebot
 import requests
 import base64
@@ -103,4 +114,6 @@ def handle_text(message):
 
 # -----------------------------------------------------
 print("🤖 Bot is running...")
+flask_thread = threading.Thread(target=run_flask)
+flask_thread.start()
 bot.infinity_polling()
