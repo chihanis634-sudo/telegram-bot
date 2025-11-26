@@ -1,0 +1,106 @@
+import telebot
+import requests
+import base64
+
+# -----------------------------------------------------
+BOT_TOKEN = "8531271957:AAFRkQAgqJRUnic2YtejXsxr1qADfxYUk_A"
+OPENROUTER_API_KEY = "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"
+# -----------------------------------------------------
+
+bot = telebot.TeleBot(BOT_TOKEN)
+
+# 🔥 نموذج يدعم الصور 100%
+MODEL = "openai/gpt-4o-mini"
+
+SYSTEM_PROMPT = """
+أنت مساعد ذكي متخصص في تحليل الصور وشرح تمارين البكالوريا
+بدقة وبطريقة تعليمية مفصلة وواضحة.
+عند إرسال صورة، قم باستخراج التمرين وشرحه بالكامل.
+"""
+
+# -----------------------------------------------------
+def to_base64(image_bytes):
+    return base64.b64encode(image_bytes).decode("utf-8")
+
+# -----------------------------------------------------
+def ask_openrouter(message_text, image_bytes=None):
+    url = "https://openrouter.ai/api/v1/chat/completions"
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    if image_bytes:
+        base64_img = to_base64(image_bytes)
+        messages.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": message_text},
+                {
+                    "type": "image_url",
+                    "image_url": f"data:image/jpeg;base64,{base64_img}"
+                }
+            ]
+        })
+    else:
+        messages.append({"role": "user", "content": message_text})
+
+    data = {
+        "model": MODEL,
+        "messages": messages
+    }
+
+    response = requests.post(url, json=data, headers=headers)
+
+    if response.status_code != 200:
+        return f"⚠️ خطأ في الاتصال بالخادم:\n{response.text}"
+
+    return response.json()["choices"][0]["message"]["content"]
+
+# -----------------------------------------------------
+@bot.message_handler(commands=["start"])
+def start(message):
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("📘 وضع البكالوريا", "🧠 وضع عام", "📸 حل تمرين من صورة")
+    bot.send_message(message.chat.id, "مرحباً! 👋 اختر وضعك:", reply_markup=markup)
+
+# -----------------------------------------------------
+# استقبال الصور
+@bot.message_handler(content_types=['photo'])
+def handle_photo(message):
+    bot.send_message(message.chat.id, "⏳ يتم تحليل الصورة...")
+
+    file_id = message.photo[-1].file_id
+    file_info = bot.get_file(file_id)
+    downloaded = bot.download_file(file_info.file_path)
+
+    answer = ask_openrouter("حل التمرين بالتفصيل:", image_bytes=downloaded)
+
+    bot.send_message(message.chat.id, answer)
+
+# -----------------------------------------------------
+@bot.message_handler(func=lambda m: True)
+def handle_text(message):
+    txt = message.text.strip()
+
+    if txt == "📘 وضع البكالوريا":
+        bot.send_message(message.chat.id, "🎓 تم تفعيل وضع البكالوريا. أرسل سؤالك.")
+        return
+
+    if txt == "🧠 وضع عام":
+        bot.send_message(message.chat.id, "🤖 تم تفعيل الوضع العام.")
+        return
+
+    if txt == "📸 حل تمرين من صورة":
+        bot.send_message(message.chat.id, "📤 أرسل الآن صورة التمرين.")
+        return
+
+    answer = ask_openrouter(txt)
+    bot.send_message(message.chat.id, answer)
+
+# -----------------------------------------------------
+print("🤖 Bot is running...")
+bot.infinity_polling()
