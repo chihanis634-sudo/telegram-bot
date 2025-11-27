@@ -1,119 +1,166 @@
 import telebot
 import requests
 import base64
-from flask import Flask
 import threading
-
-# -----------------------------
-# المتغيرات (يتم أخذها من Render)
-# -----------------------------
+from flask import Flask
 import os
 
+# أخذ التوكنات من Koyeb (Environment variables)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
+
+# ============================
+# إعدادات النموذج
+# ============================
 MODEL = "openai/gpt-4o-mini"
 
 SYSTEM_PROMPT = """
-أنت مساعد ذكي متخصص في تحليل الصور وشرح تمارين البكالوريا بدقة وبشكل تعليمي.
-عند إرسال صورة تمرين، قم باستخراج السؤال وشرحه كاملاً.
+أنت مساعد ذكي متخصص في تحليل الصور وشرحها بدقة.
 """
 
-bot = telebot.TeleBot(BOT_TOKEN)
+# ============================
+# قاعدة بيانات بسيطة (VIP + آخر رد)
+# ============================
+user_last_answer = {}          # آخر نتيجة لكل مستخدم
+VIP_USERS = {123456789, 987654321}  # ضع هنا IDs المستخدمين VIP
 
-# -----------------------------
-# Flask Keep Alive
-# -----------------------------
-app = Flask(__name__)
-@app.route("/")
-def home():
-    return "Bot is alive!"
+# ============================
+# وضع الكتابة
+# ============================
+def typing(chat_id, seconds=2):
+    bot.send_chat_action(chat_id, "typing")
+    time.sleep(seconds)
 
-def run_flask():
-    app.run(host="0.0.0.0", port=10000)
+# ============================
+# أوامر البوت
+# ============================
 
-# -----------------------------
-# Image to base64
-# -----------------------------
-def to_base64(image_bytes):
-    return base64.b64encode(image_bytes).decode("utf-8")
+@bot.message_handler(commands=['start'])
+def start_cmd(msg):
+    bot.reply_to(msg, 
+        "<b>مرحباً! 👋</b>\n"
+        "أنا بوت تحليل الصور وشرحها بدقة.\n"
+        "أرسل صورة أو نص وسيتم التحليل فوراً."
+    )
 
-# -----------------------------
-# OpenRouter Request
-# -----------------------------
-def ask_openrouter(message_text, image_bytes=None):
-    url = "https://openrouter.ai/api/v1/chat/completions"
+@bot.message_handler(commands=['help'])
+def help_cmd(msg):
+    bot.reply_to(msg,
+        "<b>الأوامر المتاحة:</b>\n"
+        "/start - بدء الاستخدام\n"
+        "/help - قائمة الأوامر\n"
+        "/vip - معرفة وضع VIP\n"
+        "/last - استرجاع آخر شرح"
+    )
+
+@bot.message_handler(commands=['vip'])
+def vip_cmd(msg):
+    uid = msg.from_user.id
+    if uid in VIP_USERS:
+        bot.reply_to(msg, "⭐ <b>أنت VIP</b>\nيمكنك استخدام البوت بلا قيود.")
+    else:
+        bot.reply_to(msg, "❌ لست VIP حالياً.\nيمكنك طلب الترقية من صاحب البوت.")
+
+@bot.message_handler(commands=['last'])
+def last_cmd(msg):
+    uid = msg.from_user.id
+    if uid in user_last_answer:
+        bot.reply_to(msg, "<b>آخر نتيجة لك:</b>\n" + user_last_answer[uid])
+    else:
+        bot.reply_to(msg, "لا يوجد تاريخ سابق لك.")
+
+# ============================
+# تحليل النصوص
+# ============================
+def ask_openrouter(question):
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": question}
+        ]
+    }
+
+    r = requests.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers)
+    data = r.json()
+    return data["choices"][0]["message"]["content"]
+
+# ============================
+# استقبال النصوص
+# ============================
+@bot.message_handler(content_types=['text'])
+def handle_text(msg):
+    chat_id = msg.chat.id
+    typing(chat_id)
+
+    answer = ask_openrouter(msg.text)
+    user_last_answer[msg.from_user.id] = answer
+
+    bot.reply_to(msg, answer)
+
+# ============================
+# استقبال الصور
+# ============================
+@bot.message_handler(content_types=['photo'])
+def handle_photo(msg):
+    chat_id = msg.chat.id
+    typing(chat_id)
+
+    file_id = msg.photo[-1].file_id
+    file_info = bot.get_file(file_id)
+    file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
+    image_data = requests.get(file_url).content
+    encoded_image = base64.b64encode(image_data).decode()
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "حلل هذه الصورة بالتفصيل"},
+                    {
+                        "type": "input_image",
+                        "image_url": f"data:image/jpeg;base64,{encoded_image}"
+                    }
+                ]
+            }
+        ]
+    }
 
-    if image_bytes:
-        b64 = to_base64(image_bytes)
-        messages.append({
-            "role": "user",
-            "content": [
-                {"type": "text", "text": message_text},
-                {"type": "image_url", "image_url": f"data:image/jpeg;base64,{b64}"}
-            ]
-        })
-    else:
-        messages.append({"role": "user", "content": message_text})
+    r = requests.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers)
+    result = r.json()["choices"][0]["message"]["content"]
 
-    data = {"model": MODEL, "messages": messages}
+    user_last_answer[msg.from_user.id] = result
+    bot.reply_to(msg, result)
 
-    response = requests.post(url, json=data, headers=headers)
+# ============================
+# تشغيل البوت Thread + Flask (ضروري لـ Koyeb)
+# ============================
 
-    if response.status_code != 200:
-        return f"⚠️ خطأ:\n{response.text}"
+app = Flask(__name__)
 
-    return response.json()["choices"][0]["message"]["content"]
+@app.route('/')
+def home():
+    return "Bot is running!"
 
-# -----------------------------
-# Bot Handlers
-# -----------------------------
-@bot.message_handler(commands=["start"])
-def start(message):
-    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📘 وضع البكالوريا", "🧠 وضع عام", "📸 حل تمرين من صورة")
-    bot.send_message(message.chat.id, "مرحباً! 👋 اختر وضعك:", reply_markup=markup)
+def run_bot():
+    bot.infinity_polling()
 
-@bot.message_handler(content_types=["photo"])
-def photo(message):
-    bot.send_message(message.chat.id, "⏳ يتم تحليل الصورة...")
-    file_id = message.photo[-1].file_id
-    file_info = bot.get_file(file_id)
-    downloaded = bot.download_file(file_info.file_path)
+threading.Thread(target=run_bot).start()
 
-    answer = ask_openrouter("حل التمرين بالتفصيل:", image_bytes=downloaded)
-    bot.send_message(message.chat.id, answer)
-
-@bot.message_handler(func=lambda m: True)
-def text_handler(message):
-    txt = message.text
-
-    if txt == "📘 وضع البكالوريا":
-        bot.send_message(message.chat.id, "🎓 تم تفعيل وضع البكالوريا.")
-        return
-
-    if txt == "🧠 وضع عام":
-        bot.send_message(message.chat.id, "🤖 تم تفعيل الوضع العام.")
-        return
-
-    if txt == "📸 حل تمرين من صورة":
-        bot.send_message(message.chat.id, "📤 أرسل صورة التمرين الآن.")
-        return
-
-    answer = ask_openrouter(txt)
-    bot.send_message(message.chat.id, answer)
-
-# -----------------------------
-# تشغيل Flask + Bot Polling
-# -----------------------------
-print("🤖 Bot is running...")
-
-threading.Thread(target=run_flask).start()
-bot.infinity_polling()
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
