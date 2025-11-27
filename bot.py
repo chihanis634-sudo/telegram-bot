@@ -1,6 +1,7 @@
 import telebot
 import requests
 import base64
+import os
 
 # -----------------------------------------------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
