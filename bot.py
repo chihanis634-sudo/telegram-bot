@@ -9,7 +9,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-MODEL = "meta-llama/llama-3.2-vision-instruct"
+MODEL = "anthropic/claude-3-haiku"
 
 # -----------------------------
 # دالة تحليل النصوص
