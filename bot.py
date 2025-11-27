@@ -9,7 +9,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-MODEL = "openai/gpt-4o"
+MODEL = "meta-llama/llama-3.2-vision-instruct"
 
 # -----------------------------
 # دالة تحليل النصوص
