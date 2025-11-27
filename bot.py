@@ -3,8 +3,8 @@ import requests
 import base64
 
 # -----------------------------------------------------
-BOT_TOKEN = "8531271957:AAGNgz1c-QFNPwQed4NwDCcO0MidBXRrqFg"
-OPENROUTER_API_KEY = "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"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 # -----------------------------------------------------
 
 bot = telebot.TeleBot(BOT_TOKEN)
