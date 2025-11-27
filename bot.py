@@ -1,93 +1,106 @@
 import telebot
 import requests
 import base64
-import os
 
-# قراءة التوكنات من المتغيرات البيئية في Koyeb
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+# -----------------------------------------------------
+BOT_TOKEN = "8531271957:AAGNgz1c-QFNPwQed4NwDCcO0MidBXRrqFg"
+OPENROUTER_API_KEY = "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"
+# -----------------------------------------------------
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-MODEL = "anthropic/claude-3-haiku"
+# 🔥 نموذج يدعم الصور 100%
+MODEL = "openai/gpt-4o-mini"
 
-# -----------------------------
-# دالة تحليل النصوص
-# -----------------------------
-def analyze_text(text):
+SYSTEM_PROMPT = """
+أنت مساعد ذكي متخصص في تحليل الصور وشرح تمارين البكالوريا
+بدقة وبطريقة تعليمية مفصلة وواضحة.
+عند إرسال صورة، قم باستخراج التمرين وشرحه بالكامل.
+"""
+
+# -----------------------------------------------------
+def to_base64(image_bytes):
+    return base64.b64encode(image_bytes).decode("utf-8")
+
+# -----------------------------------------------------
+def ask_openrouter(message_text, image_bytes=None):
     url = "https://openrouter.ai/api/v1/chat/completions"
+
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     }
 
-    data = {
-        "model": MODEL,
-        "messages": [{"role": "user", "content": text}],
-    }
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    response = requests.post(url, headers=headers, json=data)
-    result = response.json()
-
-    return result["choices"][0]["message"]["content"]
-
-# -----------------------------
-# دالة تحليل الصور
-# -----------------------------
-def analyze_image(image_url):
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    data = {
-        "model": MODEL,
-        "messages": [{
+    if image_bytes:
+        base64_img = to_base64(image_bytes)
+        messages.append({
             "role": "user",
             "content": [
-                {"type": "input_text", "text": "حلل ما في هذه الصورة بالتفصيل."},
-                {"type": "input_image", "image_url": image_url}
+                {"type": "text", "text": message_text},
+                {
+                    "type": "image_url",
+                    "image_url": f"data:image/jpeg;base64,{base64_img}"
+                }
             ]
-        }]
+        })
+    else:
+        messages.append({"role": "user", "content": message_text})
+
+    data = {
+        "model": MODEL,
+        "messages": messages
     }
 
-    response = requests.post(url, headers=headers, json=data)
-    result = response.json()
+    response = requests.post(url, json=data, headers=headers)
 
-    return result["choices"][0]["message"]["content"]
+    if response.status_code != 200:
+        return f"⚠️ خطأ في الاتصال بالخادم:\n{response.text}"
 
-# -----------------------------
+    return response.json()["choices"][0]["message"]["content"]
+
+# -----------------------------------------------------
+@bot.message_handler(commands=["start"])
+def start(message):
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("📘 وضع البكالوريا", "🧠 وضع عام", "📸 حل تمرين من صورة")
+    bot.send_message(message.chat.id, "مرحباً! 👋 اختر وضعك:", reply_markup=markup)
+
+# -----------------------------------------------------
 # استقبال الصور
-# -----------------------------
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
+    bot.send_message(message.chat.id, "⏳ يتم تحليل الصورة...")
+
     file_id = message.photo[-1].file_id
     file_info = bot.get_file(file_id)
-    image_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
+    downloaded = bot.download_file(file_info.file_path)
 
-    bot.reply_to(message, "📷 يتم تحليل الصورة...")
+    answer = ask_openrouter("حل التمرين بالتفصيل:", image_bytes=downloaded)
 
-    try:
-        result = analyze_image(image_url)
-        bot.reply_to(message, result)
-    except Exception as e:
-        bot.reply_to(message, f"⚠️ حدث خطأ أثناء تحليل الصورة:\n{e}")
+    bot.send_message(message.chat.id, answer)
 
-# -----------------------------
-# استقبال النصوص
-# -----------------------------
+# -----------------------------------------------------
 @bot.message_handler(func=lambda m: True)
 def handle_text(message):
-    bot.reply_to(message, "⏳ يتم التحليل...")
+    txt = message.text.strip()
 
-    try:
-        result = analyze_text(message.text)
-        bot.reply_to(message, result)
-    except Exception as e:
-        bot.reply_to(message, f"⚠️ حدث خطأ أثناء تحليل النص:\n{e}")
+    if txt == "📘 وضع البكالوريا":
+        bot.send_message(message.chat.id, "🎓 تم تفعيل وضع البكالوريا. أرسل سؤالك.")
+        return
 
-# -----------------------------
-# تشغيل البوت
-# -----------------------------
-bot.polling(none_stop=True)
+    if txt == "🧠 وضع عام":
+        bot.send_message(message.chat.id, "🤖 تم تفعيل الوضع العام.")
+        return
+
+    if txt == "📸 حل تمرين من صورة":
+        bot.send_message(message.chat.id, "📤 أرسل الآن صورة التمرين.")
+        return
+
+    answer = ask_openrouter(txt)
+    bot.send_message(message.chat.id, answer)
+
+# -----------------------------------------------------
+print("🤖 Bot is running...")
+bot.infinity_polling()
