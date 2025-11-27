@@ -9,7 +9,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-MODEL = "openai/gpt-4o-mini"
+MODEL = "openai/gpt-4o"
 
 # -----------------------------
 # دالة تحليل النصوص
