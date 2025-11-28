@@ -2,6 +2,48 @@ import telebot
 import requests
 import base64
 import os
+from youtube_transcript_api import YouTubeTranscriptApi
+
+def extract_youtube_text(youtube_url):
+    try:
+        # استخراج ID الفيديو
+        if "v=" in youtube_url:
+            video_id = youtube_url.split("v=")[1].split("&")[0]
+        else:
+            video_id = youtube_url.split("/")[-1]
+
+        transcript = YouTubeTranscriptApi.get_transcript(
+            video_id, languages=['ar', 'en']
+        )
+
+        full_text = " ".join([entry['text'] for entry in transcript])
+        return full_text
+
+    except Exception as e:
+        return None
+def summarize_text(text):
+    url = "https://openrouter.ai/api/v1/chat/completions"
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {"role": "system", "content": "اشرح الفيديو بشكل مبسط وواضح."},
+            {"role": "user", "content": f"رجاءً اشرح هذا الفيديو:\n\n{text}"}
+        ]
+    }
+
+    response = requests.post(url, headers=headers, json=payload).json()
+
+    try:
+        return response["choices"][0]["message"]["content"]
+    except:
+        return "⚠️ حدث خطأ أثناء الشرح."
+
 
 # -----------------------------------------------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -103,5 +145,24 @@ def handle_text(message):
     bot.send_message(message.chat.id, answer)
 
 # -----------------------------------------------------
+@bot.message_handler(func=lambda msg: "youtube.com" in msg.text or "youtu.be" in msg.text)
+def handle_youtube(message):
+    bot.reply_to(message, "⏳ جاري استخراج محتوى الفيديو...")
+
+    url = message.text.strip()
+
+    text = extract_youtube_text(url)
+
+    if not text:
+        bot.reply_to(message, "⚠️ لا يمكن استخراج نص الفيديو.\nقد يكون لا يحتوي على ترجمة.")
+        return
+
+    bot.reply_to(message, "📄 تم استخراج النص! جاري شرحه...")
+
+    summary = summarize_text(text)
+
+    bot.reply_to(message, summary)
+# -----------------------------------------------------
+
 print("🤖 Bot is running...")
 bot.infinity_polling()
