@@ -3,6 +3,7 @@ import requests
 import base64
 import os
 from youtube_transcript_api import YouTubeTranscriptApi
+import re
 
 def extract_youtube_text(youtube_url):
     try:
@@ -60,6 +61,8 @@ SYSTEM_PROMPT = """
 بدقة وبطريقة تعليمية مفصلة وواضحة.
 عند إرسال صورة، قم باستخراج التمرين وشرحه بالكامل.
 """
+# -----------------------------------------------------
+YOUTUBE_REGEX = r"(https?://)?(www\.)?(youtube\.com|youtu\.be)/(watch\?v=[\w-]+|shorts/[\w-]+|[\w-]+)"
 
 # -----------------------------------------------------
 def to_base64(image_bytes):
