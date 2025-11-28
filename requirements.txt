@@ -1,3 +1,5 @@
 Flask
 pyTelegramBotAPI
 requests
+youtube_transcript_api
+
