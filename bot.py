@@ -126,6 +126,26 @@ def handle_photo(message):
     answer = ask_openrouter("حل التمرين بالتفصيل:", image_bytes=downloaded)
 
     bot.send_message(message.chat.id, answer)
+# -----------------------------------------------------
+@bot.message_handler(func=lambda msg: msg.text and ("youtube.com" in msg.text or "youtu.be" in msg.text))
+def handle_youtube(message):
+    bot.reply_to(message, "⏳ جاري استخراج محتوى الفيديو...")
+
+    url = message.text.strip()
+
+    # استخراج النص من فيديو يوتيوب
+    text = extract_youtube_text(url)
+
+    if not text:
+        bot.reply_to(message, "⚠️ لا يمكن استخراج نص الفيديو.\nقد يكون بدون ترجمة.")
+        return
+
+    bot.reply_to(message, "📄 تم استخراج النص! جاري تلخيصه...")
+
+    # تلخيص النص
+    summary = summarize_text(text)
+
+    bot.reply_to(message, summary)
 
 # -----------------------------------------------------
 @bot.message_handler(func=lambda m: True)
@@ -147,24 +167,6 @@ def handle_text(message):
     answer = ask_openrouter(txt)
     bot.send_message(message.chat.id, answer)
 
-# -----------------------------------------------------
-@bot.message_handler(func=lambda msg: "youtube.com" in msg.text or "youtu.be" in msg.text)
-def handle_youtube(message):
-    bot.reply_to(message, "⏳ جاري استخراج محتوى الفيديو...")
-
-    url = message.text.strip()
-
-    text = extract_youtube_text(url)
-
-    if not text:
-        bot.reply_to(message, "⚠️ لا يمكن استخراج نص الفيديو.\nقد يكون لا يحتوي على ترجمة.")
-        return
-
-    bot.reply_to(message, "📄 تم استخراج النص! جاري شرحه...")
-
-    summary = summarize_text(text)
-
-    bot.reply_to(message, summary)
 # -----------------------------------------------------
 
 print("🤖 Bot is running...")
